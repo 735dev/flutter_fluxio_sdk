@@ -10,7 +10,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  livekit_client: 2.13.1
+  # Exacta y NO subir sin revisar la app: livekit_client >=2.4.9 exige protobuf >=4,
+  # y la app trae mcumgr_flutter 0.4.2 (firmware del collar) que exige protobuf ^3.1.
+  # 2.4.7 es la última con protobuf ^3.0.0 (2.4.8 declara >=3 pero su código generado
+  # necesita protobuf 4: no compila con 3.1).
+  livekit_client: 2.4.7
 
 dev_dependencies:
   flutter_test:
