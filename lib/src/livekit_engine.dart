@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart' hide ConnectionState;
+import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart';
 
 import 'engine.dart';
@@ -36,6 +37,8 @@ class LiveKitFluxioEngine implements FluxioEngine {
   Future<void> open(FluxioJoin join) async {
     _microphoneOn = join.audio;
     _cameraOn = join.video;
+    // Voice-call audio keeps the microphone when Android sends the app to the background.
+    await rtc.Helper.setAndroidAudioConfiguration(rtc.AndroidAudioConfiguration.communication);
     _listener ??= _room.createListener()
       ..on<RoomDisconnectedEvent>(_onDisconnected)
       ..on<ParticipantConnectedEvent>((_) => _emitConnected())
@@ -101,7 +104,10 @@ class LiveKitFluxioEngine implements FluxioEngine {
       if (publication.source == TrackSource.camera &&
           track is VideoTrack &&
           !publication.muted) {
-        return VideoTrackRenderer(track);
+        return VideoTrackRenderer(
+          track,
+          fit: rtc.RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+        );
       }
     }
     return null;
