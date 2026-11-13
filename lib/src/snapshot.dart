@@ -10,12 +10,16 @@ class FluxioPeer {
     required this.local,
     required this.cameraOn,
     required this.microphoneOn,
+    this.speaking = false,
   });
 
   final String identity;
   final bool local;
   final bool cameraOn;
   final bool microphoneOn;
+
+  /// Talking right now (LiveKit active speaker). Voice channels draw a ring with it; calls may ignore it.
+  final bool speaking;
 }
 
 class FluxioSnapshot {

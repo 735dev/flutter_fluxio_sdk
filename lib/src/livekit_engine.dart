@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/widgets.dart' hide ConnectionState;
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
@@ -14,9 +15,12 @@ class LiveKitFluxioEngine implements FluxioEngine {
     : _room =
           room ??
           Room(
-            roomOptions: const RoomOptions(
+            roomOptions: RoomOptions(
               adaptiveStream: true,
-              defaultAudioOutputOptions: AudioOutputOptions(speakerOn: true),
+              // Android: forcing the speakerphone here selects it explicitly and steals the audio from
+              // Bluetooth or wired headphones. Routing is decided after connecting (_routeAudio).
+              // iOS keeps the previous behaviour: the system already prefers connected headphones.
+              defaultAudioOutputOptions: AudioOutputOptions(speakerOn: Platform.isIOS ? true : null),
             ),
           );
 
@@ -29,6 +33,8 @@ class LiveKitFluxioEngine implements FluxioEngine {
   var _leftByUs = false;
   var _closed = false;
   var _reportedDisconnect = false;
+  StreamSubscription<List<MediaDevice>>? _devices;
+  var _deafened = false;
 
   @override
   Stream<FluxioSnapshot> get changes => _changes.stream;
@@ -43,7 +49,11 @@ class LiveKitFluxioEngine implements FluxioEngine {
       ..on<RoomDisconnectedEvent>(_onDisconnected)
       ..on<ParticipantConnectedEvent>((_) => _emitConnected())
       ..on<ParticipantDisconnectedEvent>((_) => _emitConnected())
-      ..on<TrackSubscribedEvent>((_) => _emitConnected())
+      ..on<ActiveSpeakersChangedEvent>((_) => _emitConnected())
+      ..on<TrackSubscribedEvent>((event) {
+        if (_deafened && event.track is AudioTrack) unawaited(event.track.disable());
+        _emitConnected();
+      })
       ..on<TrackUnsubscribedEvent>((_) => _emitConnected())
       ..on<TrackMutedEvent>((_) => _emitConnected())
       ..on<TrackUnmutedEvent>((_) => _emitConnected())
@@ -65,7 +75,19 @@ class LiveKitFluxioEngine implements FluxioEngine {
       rethrow;
     }
     _opened = true;
+    await _routeAudio();
+    // Headphones connected or disconnected mid-call: route again (Bluetooth, then wired, then speaker).
+    _devices ??= Hardware.instance.onDeviceChange.stream.listen((_) => _routeAudio());
     _emitConnected();
+  }
+
+  /// Android: Bluetooth headset first, then wired headset, otherwise the loudspeaker (a video call held at
+  /// arm's length, not at the ear). Never fails the call over audio routing.
+  Future<void> _routeAudio() async {
+    if (!Platform.isAndroid || _closed) return;
+    try {
+      await rtc.Helper.setSpeakerphoneOnButPreferBluetooth();
+    } catch (_) {}
   }
 
   @override
@@ -82,6 +104,18 @@ class LiveKitFluxioEngine implements FluxioEngine {
     _emitConnected();
   }
 
+  /// Deafen: stop hearing everybody else (voice channels). Not on [FluxioEngine] so fakes keep compiling.
+  Future<void> setDeafened(bool deafened) async {
+    _deafened = deafened;
+    for (final remote in _room.remoteParticipants.values) {
+      for (final publication in remote.audioTrackPublications) {
+        final track = publication.track;
+        if (track == null) continue;
+        await (deafened ? track.disable() : track.enable());
+      }
+    }
+  }
+
   @override
   Future<void> close() async {
     if (_closed) return;
@@ -90,6 +124,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
     try {
       await _room.disconnect();
     } finally {
+      await _devices?.cancel();
       await _listener?.dispose();
       await _room.dispose();
     }
@@ -146,6 +181,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
           local: true,
           cameraOn: _cameraOn,
           microphoneOn: _microphoneOn,
+          speaking: local.isSpeaking,
         ),
       );
     }
@@ -159,6 +195,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
           local: false,
           cameraOn: _hasCamera(remote),
           microphoneOn: _hasMicrophone(remote),
+          speaking: remote.isSpeaking,
         ),
       );
     }
