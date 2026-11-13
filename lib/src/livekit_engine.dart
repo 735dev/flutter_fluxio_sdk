@@ -34,6 +34,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
   var _closed = false;
   var _reportedDisconnect = false;
   StreamSubscription<List<MediaDevice>>? _devices;
+  var _deafened = false;
 
   @override
   Stream<FluxioSnapshot> get changes => _changes.stream;
@@ -48,7 +49,11 @@ class LiveKitFluxioEngine implements FluxioEngine {
       ..on<RoomDisconnectedEvent>(_onDisconnected)
       ..on<ParticipantConnectedEvent>((_) => _emitConnected())
       ..on<ParticipantDisconnectedEvent>((_) => _emitConnected())
-      ..on<TrackSubscribedEvent>((_) => _emitConnected())
+      ..on<ActiveSpeakersChangedEvent>((_) => _emitConnected())
+      ..on<TrackSubscribedEvent>((event) {
+        if (_deafened && event.track is AudioTrack) unawaited(event.track.disable());
+        _emitConnected();
+      })
       ..on<TrackUnsubscribedEvent>((_) => _emitConnected())
       ..on<TrackMutedEvent>((_) => _emitConnected())
       ..on<TrackUnmutedEvent>((_) => _emitConnected())
@@ -97,6 +102,18 @@ class LiveKitFluxioEngine implements FluxioEngine {
     await _room.localParticipant?.setCameraEnabled(enabled);
     _cameraOn = enabled;
     _emitConnected();
+  }
+
+  /// Deafen: stop hearing everybody else (voice channels). Not on [FluxioEngine] so fakes keep compiling.
+  Future<void> setDeafened(bool deafened) async {
+    _deafened = deafened;
+    for (final remote in _room.remoteParticipants.values) {
+      for (final publication in remote.audioTrackPublications) {
+        final track = publication.track;
+        if (track == null) continue;
+        await (deafened ? track.disable() : track.enable());
+      }
+    }
   }
 
   @override
@@ -164,6 +181,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
           local: true,
           cameraOn: _cameraOn,
           microphoneOn: _microphoneOn,
+          speaking: local.isSpeaking,
         ),
       );
     }
@@ -177,6 +195,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
           local: false,
           cameraOn: _hasCamera(remote),
           microphoneOn: _hasMicrophone(remote),
+          speaking: remote.isSpeaking,
         ),
       );
     }
