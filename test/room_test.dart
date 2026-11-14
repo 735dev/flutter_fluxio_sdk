@@ -39,6 +39,26 @@ void main() {
     expect(find.textContaining('wss://'), findsNothing);
   });
 
+  testWidgets('watch joins without microphone or camera', (tester) async {
+    final engine = _FakeEngine();
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: FluxioRoom.watch(
+          token: 'jwt',
+          serverUrl: 'wss://live.example',
+          engine: engine,
+          builder: (_, snapshot, __) => Text(snapshot.microphoneOn ? 'mic-on' : 'mic-off'),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(engine.opened?.watch, isTrue);
+    expect(engine.opened?.audio, isFalse);
+    expect(engine.opened?.video, isFalse);
+    expect(find.text('mic-off'), findsOneWidget);
+  });
+
   testWidgets('a drop is reported once', (tester) async {
     final engine = _FakeEngine();
     var drops = 0;

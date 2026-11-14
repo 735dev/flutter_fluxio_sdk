@@ -29,6 +29,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
   final _changes = StreamController<FluxioSnapshot>.broadcast();
   var _microphoneOn = true;
   var _cameraOn = false;
+  var _watch = false;
   var _opened = false;
   var _leftByUs = false;
   var _closed = false;
@@ -41,8 +42,9 @@ class LiveKitFluxioEngine implements FluxioEngine {
 
   @override
   Future<void> open(FluxioJoin join) async {
-    _microphoneOn = join.audio;
-    _cameraOn = join.video;
+    _watch = join.watch;
+    _microphoneOn = join.watch ? false : join.audio;
+    _cameraOn = join.watch ? false : join.video;
     // Voice-call audio keeps the microphone when Android sends the app to the background.
     await rtc.Helper.setAndroidAudioConfiguration(rtc.AndroidAudioConfiguration.communication);
     _listener ??= _room.createListener()
@@ -65,8 +67,8 @@ class LiveKitFluxioEngine implements FluxioEngine {
         join.token,
         connectOptions: const ConnectOptions(autoSubscribe: true),
         fastConnectOptions: FastConnectOptions(
-          microphone: TrackOption(enabled: join.audio),
-          camera: TrackOption(enabled: join.video),
+          microphone: TrackOption(enabled: _microphoneOn),
+          camera: TrackOption(enabled: _cameraOn),
         ),
       );
     } catch (_) {
@@ -92,6 +94,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
 
   @override
   Future<void> setMicrophone(bool enabled) async {
+    if (_watch) return;
     await _room.localParticipant?.setMicrophoneEnabled(enabled);
     _microphoneOn = enabled;
     _emitConnected();
@@ -99,6 +102,7 @@ class LiveKitFluxioEngine implements FluxioEngine {
 
   @override
   Future<void> setCamera(bool enabled) async {
+    if (_watch) return;
     await _room.localParticipant?.setCameraEnabled(enabled);
     _cameraOn = enabled;
     _emitConnected();

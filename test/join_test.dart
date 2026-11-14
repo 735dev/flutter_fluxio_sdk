@@ -2,6 +2,16 @@ import 'package:flutter_fluxio_sdk/flutter_fluxio_sdk.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('a watch join never publishes', () {
+    final join = FluxioJoin.watch(
+      token: 'jwt',
+      serverUrl: 'wss://live.example',
+    );
+    expect(join.watch, isTrue);
+    expect(join.video, isFalse);
+    expect(join.audio, isFalse);
+  });
+
   test('camera starts off and the microphone starts on', () {
     final join = FluxioJoin(
       token: 'jwt',

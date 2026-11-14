@@ -5,8 +5,19 @@ class FluxioJoin {
     required String serverUrl,
     this.video = false,
     this.audio = true,
+    this.watch = false,
   }) : token = _token(token),
        serverUrl = _serverUrl(serverUrl);
+
+  /// Audience join. The token must be a viewer token. Camera and microphone stay off.
+  FluxioJoin.watch({
+    required String token,
+    required String serverUrl,
+  }) : token = _token(token),
+       serverUrl = _serverUrl(serverUrl),
+       video = false,
+       audio = false,
+       watch = true;
 
   final String token;
   final String serverUrl;
@@ -16,6 +27,9 @@ class FluxioJoin {
 
   /// Microphone stays on unless the caller turns it off before joining.
   final bool audio;
+
+  /// True when this join only watches a stream and must not publish.
+  final bool watch;
 
   static String _token(String raw) {
     final token = raw.trim();

@@ -36,6 +36,7 @@ class FluxioRoom extends StatefulWidget {
     required this.serverUrl,
     this.video = false,
     this.audio = true,
+    this.watch = false,
     this.engine,
     this.onDisconnected,
     required this.builder,
@@ -43,8 +44,22 @@ class FluxioRoom extends StatefulWidget {
 
   final String token;
   final String serverUrl;
+
+  /// Audience. Camera and microphone stay off.
+  const FluxioRoom.watch({
+    super.key,
+    required this.token,
+    required this.serverUrl,
+    this.engine,
+    this.onDisconnected,
+    required this.builder,
+  }) : video = false,
+       audio = false,
+       watch = true;
+
   final bool video;
   final bool audio;
+  final bool watch;
   final FluxioEngine? engine;
   final VoidCallback? onDisconnected;
   final FluxioRoomBuilder builder;
@@ -77,12 +92,14 @@ class _FluxioRoomState extends State<FluxioRoom> {
   Future<void> _open() async {
     try {
       await _engine.open(
-        FluxioJoin(
-          token: widget.token,
-          serverUrl: widget.serverUrl,
-          video: widget.video,
-          audio: widget.audio,
-        ),
+        widget.watch
+            ? FluxioJoin.watch(token: widget.token, serverUrl: widget.serverUrl)
+            : FluxioJoin(
+                token: widget.token,
+                serverUrl: widget.serverUrl,
+                video: widget.video,
+                audio: widget.audio,
+              ),
       );
     } catch (_) {
       // open() can fail before the first frame. Report it after initState.
@@ -102,10 +119,15 @@ class _FluxioRoomState extends State<FluxioRoom> {
     widget.onDisconnected?.call();
   }
 
-  Future<void> _toggleMicrophone() =>
-      _engine.setMicrophone(!_snapshot.microphoneOn);
+  Future<void> _toggleMicrophone() {
+    if (widget.watch) return Future<void>.value();
+    return _engine.setMicrophone(!_snapshot.microphoneOn);
+  }
 
-  Future<void> _toggleCamera() => _engine.setCamera(!_snapshot.cameraOn);
+  Future<void> _toggleCamera() {
+    if (widget.watch) return Future<void>.value();
+    return _engine.setCamera(!_snapshot.cameraOn);
+  }
 
   @override
   void dispose() {
